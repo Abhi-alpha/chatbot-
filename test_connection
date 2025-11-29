@@ -1,0 +1,10 @@
+import os
+from sqlalchemy import create_engine
+
+
+url = os.getenv("DATABASE_URL", "postgresql+psycopg2://postgres:Mochi242@localhost:5432/insurance_bot")
+engine = create_engine(url)
+with engine.connect() as conn:
+    print("Connected:", conn)
+
+   

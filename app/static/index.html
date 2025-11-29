@@ -1,0 +1,261 @@
+
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Insurance Policy QA</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <!-- Tailwind via CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-50 text-gray-900">
+  <div class="max-w-6xl mx-auto p-4 space-y-6">
+    <header class="flex items-center justify-between">
+      <h1 class="text-2xl font-bold">Insurance Policy QA</h1>
+      <span id="status" class="text-sm text-gray-500"></span>
+    </header>
+
+    <!-- Filters -->
+    <section class="bg-white rounded-xl shadow p-4 space-y-3">
+      <h2 class="font-semibold text-lg">Search Catalog</h2>
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+        <div>
+          <label class="block text-sm font-medium mb-1">UIN</label>
+          <select id="uinSelect" class="w-full border rounded-lg p-2 bg-white"></select>
+        </div>
+        <div>
+          <label class="block text-sm font-medium mb-1">Insurer</label>
+          <select id="insurerSelect" class="w-full border rounded-lg p-2 bg-white"></select>
+        </div>
+        <div>
+          <label class="block text-sm font-medium mb-1">Product Type</label>
+          <select id="ptypeSelect" class="w-full border rounded-lg p-2 bg-white"></select>
+        </div>
+      </div>
+      <div class="flex gap-2">
+        <button id="searchBtn" class="px-4 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700">Search</button>
+        <button id="clearBtn" class="px-4 py-2 rounded-lg bg-gray-200 hover:bg-gray-300">Clear</button>
+      </div>
+    </section>
+
+    <!-- Results -->
+    <section class="bg-white rounded-xl shadow p-4">
+      <div class="flex items-center justify-between mb-3">
+        <h2 class="font-semibold text-lg">Results</h2>
+        <div class="text-sm">Selected UIN: <span id="selectedUIN" class="font-mono text-blue-700">—</span></div>
+      </div>
+      <div class="overflow-auto">
+        <table class="min-w-full text-sm">
+          <thead class="bg-gray-100">
+            <tr>
+              <th class="text-left p-2">UIN</th>
+              <th class="text-left p-2">Insurer</th>
+              <th class="text-left p-2">Product</th>
+              <th class="text-left p-2">Eff. From</th>
+              <th class="text-left p-2">Approval</th>
+              <th class="text-left p-2">Type</th>
+              <th class="text-left p-2">PDF</th>
+              <th class="text-left p-2">Select</th>
+            </tr>
+          </thead>
+          <tbody id="resultsBody"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- Ask -->
+    <section class="bg-white rounded-xl shadow p-4 space-y-3">
+      <h2 class="font-semibold text-lg">Ask a Question</h2>
+      <div>
+        <label class="block text-sm font-medium mb-1">Question</label>
+        <input id="questionInput" type="text" class="w-full border rounded-lg p-2" placeholder="e.g., What is the waiting period for pre-existing diseases?" />
+      </div>
+      <div class="flex gap-2">
+        <button id="askBtn" class="px-4 py-2 rounded-lg bg-emerald-600 text-white hover:bg-emerald-700">Get the Answer</button>
+        <span id="askHint" class="text-sm text-gray-500">Select a version (UIN) above first.</span>
+      </div>
+    </section>
+
+    <!-- Answer -->
+    <section class="bg-white rounded-xl shadow p-4 space-y-3">
+      <h2 class="font-semibold text-lg">Answer</h2>
+      <pre id="answer" class="whitespace-pre-wrap text-sm bg-gray-50 p-3 rounded-lg border min-h-[80px]"></pre>
+      <div>
+        <h3 class="font-medium mb-2">Citations</h3>
+        <ul id="sources" class="space-y-2"></ul>
+      </div>
+    </section>
+  </div>
+
+  <script>
+    const els = {
+      status: document.getElementById('status'),
+      uinSelect: document.getElementById('uinSelect'),
+      insurerSelect: document.getElementById('insurerSelect'),
+      ptypeSelect: document.getElementById('ptypeSelect'),
+      searchBtn: document.getElementById('searchBtn'),
+      clearBtn: document.getElementById('clearBtn'),
+      resultsBody: document.getElementById('resultsBody'),
+      selectedUIN: document.getElementById('selectedUIN'),
+      questionInput: document.getElementById('questionInput'),
+      askBtn: document.getElementById('askBtn'),
+      askHint: document.getElementById('askHint'),
+      answer: document.getElementById('answer'),
+      sources: document.getElementById('sources'),
+    };
+
+    let selectedUIN = null;
+
+    function setStatus(msg, ok=true) {
+      els.status.textContent = msg || '';
+      els.status.className = ok ? "text-sm text-gray-500" : "text-sm text-red-600";
+    }
+
+    function opt(value, label) {
+      const o = document.createElement('option');
+      o.value = value; o.textContent = label;
+      return o;
+    }
+
+    async function loadFilters() {
+      setStatus('Loading filters…');
+      try {
+        const res = await fetch('/catalog/filters');
+        if (!res.ok) throw new Error('Failed to load filters');
+        const data = await res.json();
+
+        // reset dropdowns with a blank option
+        [els.uinSelect, els.insurerSelect, els.ptypeSelect].forEach(sel => {
+          sel.innerHTML = '';
+          sel.appendChild(opt('', '— Any —'));
+        });
+
+        (data.uins || []).forEach(v => els.uinSelect.appendChild(opt(v, v)));
+        (data.insurers || []).forEach(v => els.insurerSelect.appendChild(opt(v, v)));
+        (data.product_types || []).forEach(v => els.ptypeSelect.appendChild(opt(v, v)));
+
+        setStatus('Ready');
+      } catch (e) {
+        setStatus(e.message, false);
+      }
+    }
+
+    async function searchCatalog() {
+      setStatus('Searching…');
+      els.resultsBody.innerHTML = '';
+      selectedUIN = null;
+      els.selectedUIN.textContent = '—';
+
+      const params = new URLSearchParams();
+      if (els.uinSelect.value) params.set('uin', els.uinSelect.value);
+      if (els.insurerSelect.value) params.set('insurer_name', els.insurerSelect.value);
+      if (els.ptypeSelect.value) params.set('product_type', els.ptypeSelect.value);
+
+      try {
+        const res = await fetch('/catalog/search?' + params.toString());
+        if (!res.ok) throw new Error('Search failed');
+        const rows = await res.json();
+
+        if (!rows.length) {
+          els.resultsBody.innerHTML = '<tr><td colspan="8" class="p-3 text-center text-gray-500">No results</td></tr>';
+          setStatus('No results');
+          return;
+        }
+
+        rows.forEach(row => {
+          const tr = document.createElement('tr');
+          tr.className = 'border-t';
+          tr.innerHTML = `
+            <td class="p-2 font-mono">${row.uin || ''}</td>
+            <td class="p-2">${row.insurer || ''}</td>
+            <td class="p-2">${row.product_name || ''}</td>
+            <td class="p-2">${row.effective_date || ''}</td>
+            <td class="p-2">${row.approval_date || ''}</td>
+            <td class="p-2">${row.product_type || ''}</td>
+            <td class="p-2">
+              ${row.document_pdf ? `<a href="${row.document_pdf}" class="text-blue-700 underline" target="_blank" rel="noopener">PDF</a>` : '<span class="text-gray-400">—</span>'}
+            </td>
+            <td class="p-2">
+              <button class="px-2 py-1 rounded bg-indigo-600 text-white hover:bg-indigo-700">Select</button>
+            </td>
+          `;
+          tr.querySelector('button').addEventListener('click', () => {
+            selectedUIN = row.uin;
+            els.selectedUIN.textContent = selectedUIN || '—';
+            setStatus(`Selected UIN ${selectedUIN}`);
+          });
+          els.resultsBody.appendChild(tr);
+        });
+
+        setStatus('Ready');
+      } catch (e) {
+        setStatus(e.message, false);
+      }
+    }
+
+    async function askQuestion() {
+      if (!selectedUIN) {
+        setStatus('Select a version (UIN) first', false);
+        return;
+      }
+      const q = (els.questionInput.value || '').trim();
+      if (!q) {
+        setStatus('Type a question', false);
+        return;
+      }
+      setStatus('Asking…');
+      els.answer.textContent = '';
+      els.sources.innerHTML = '';
+
+      try {
+        const res = await fetch('/chat/ask', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ uin: selectedUIN, question: q, top_k: 5 })
+        });
+        if (!res.ok) {
+          const err = await res.text();
+          throw new Error(`Server error (${res.status}): ${err.slice(0, 200)}`);
+        }
+        const data = await res.json();
+
+        els.answer.textContent = data.answer || '';
+
+        (data.sources || []).forEach((s, i) => {
+          const li = document.createElement('li');
+          li.className = 'p-3 rounded-lg border bg-gray-50';
+          const pages = (s.page_from && s.page_to) ? ` (pages ${s.page_from}–${s.page_to})` : '';
+          li.innerHTML = `
+            <div class="text-sm font-semibold">[S${i+1}]${pages}</div>
+            <div class="text-sm mb-1">${(s.excerpt || '').replace(/</g,'&lt;')}</div>
+            ${s.document_pdf ? `<a class="text-blue-700 underline text-sm" href="${s.document_pdf}" target="_blank" rel="noopener">Open PDF</a>` : ''}
+          `;
+          els.sources.appendChild(li);
+        });
+
+        setStatus('Ready');
+      } catch (e) {
+        setStatus(e.message, false);
+      }
+    }
+
+    // events
+    els.searchBtn.addEventListener('click', searchCatalog);
+    els.clearBtn.addEventListener('click', () => {
+      els.uinSelect.value = '';
+      els.insurerSelect.value = '';
+      els.ptypeSelect.value = '';
+      els.resultsBody.innerHTML = '';
+      selectedUIN = null;
+      els.selectedUIN.textContent = '—';
+      els.answer.textContent = '';
+      els.sources.innerHTML = '';
+      setStatus('Cleared');
+    });
+    els.askBtn.addEventListener('click', askQuestion);
+
+    // boot
+    loadFilters();
+  </script>
+</body>
+</html>

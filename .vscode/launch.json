@@ -1,0 +1,31 @@
+
+    // Use IntelliSense to learn about possible attributes.
+    // Hover to view descriptions of existing attributes.
+    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Ingest Policy (module)",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "app.scripts.ingest_policy",
+      "justMyCode": true,
+      "cwd": "${workspaceFolder}",
+      "envFile": "${workspaceFolder}/.env",        // loads DB URL / OPENAI key
+      "console": "integratedTerminal"
+    },
+    {
+      "name": "Ingest Policyv2 (module)",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "app.scripts.ingest_policyv2",
+      "justMyCode": true,
+      "cwd": "${workspaceFolder}",
+      "envFile": "${workspaceFolder}/.env",        // loads DB URL / OPENAI key
+      "console": "integratedTerminal"
+    }
+  ]
+}
+
+
